@@ -1,0 +1,13 @@
+name: balltracker
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.6.13=h12debd9_1
+  - imutils=0.5.4=py36h5fab9bb_0
+  - numpy=1.19.5=py36hfc0c790_2
+  - opencv=4.2.0=py36_7
+  - ros-rospy
+  - ros-cv-bridge
+  
+prefix: /Users/username/anaconda3/envs/balltracker
