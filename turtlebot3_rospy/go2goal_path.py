@@ -8,6 +8,9 @@ from tf.transformations import euler_from_quaternion
 import time
 import sys
 import numpy as np
+import threading
+import sys
+import signal
 
 class TurtleBot:
     def __init__(self):
@@ -190,123 +193,124 @@ def getSquare(x0, y0, l, step):
     goal = list(zip(x, y, theta))
     return goal 
 
-# def getPathInfo():
-#     isPt = False
-#     isOriented = False
-#     goal_theta = -4
-#     while (True):
-#         pathType = input("Enter type of path (C or c: circle, S or s: square, pt = point): ")
-#         if pathType == 'C' or pathType == 'c':
-#             path_cx = float(input("Enter x of centre: "))
-#             path_cy = float(input("Enter y of centre: "))
-#             path_r = float(input("Enter radius of circle: "))
-#             path_step = float(input("Enter step: "))
-#             [goal_x, goal_y] = getCircle(path_cx, path_cy, path_r, path_step)
-#             break
-#         elif pathType == 'S' or pathType == 's':
-#             path_cx = float(input("Enter x of starting point: "))
-#             path_cy = float(input("Enter y of starting point: "))
-#             path_l = float(input("Enter length of square: "))
-#             path_step = float(input("Enter step: "))
-#             [goal_x, goal_y] = getSquare(path_cx, path_cy, path_l, path_step)
-#             break
-#         elif pathType == 'pt':
-#             goal_x = float(input("Enter x: "))
-#             goal_y = float(input("Enter y: "))
-#             isPt = True
-#             isOriented = bool(int(input("Enter any number to enter goal theta, 0 to ignore: ")))
-#             if isOriented:
-#                 while (abs(goal_theta) > 3.14):
-#                     goal_theta = float(input("Enter goal theta: "))
-#             break
-#         else:
-#             print("Please enter a valid path type")
-#     return (goal_x, goal_y, goal_theta, isPt)
+global goal
+goal = []
+global goal_tol
+goal_tol = 0.1
 
-def getPath():
-    pathLine = input("Generate path: ").split(' ')
+def input_thread(lock):
+    new_goal = []
     while True:
-        if len(pathLine) == 5:
-            if pathLine[0] == 'C' or pathLine[0] == 'c':
+        while True:
+            # pathLine = input("Generate path: ").split(' ')
+            pathLine = input().split(' ')
+            if len(pathLine) == 5 and (pathLine[0] == 'C' or pathLine[0] == 'c'):
                 path_cx = float(pathLine[1])
                 path_cy = float(pathLine[2])
                 path_r = float(pathLine[3])
                 path_step = float(pathLine[4])
-                goal = getCircle(path_cx, path_cy, path_r, path_step)
+                new_goal = getCircle(path_cx, path_cy, path_r, path_step)
                 break
-            elif pathLine[0] == 'S' or pathLinep[0] == 's':
+            elif len(pathLine) == 5 and (pathLine[0] == 'S' or pathLine[0] == 's'):
                 path_cx = float(pathLine[1])
                 path_cy = float(pathLine[2])
                 path_l = float(pathLine[3])
                 path_step = float(pathLine[4])
-                goal = getSquare(path_cx, path_cy, path_l, path_step)
+                new_goal = getSquare(path_cx, path_cy, path_l, path_step)
                 break
-        elif len(pathLine) == 4:
-            if pathLine[0] == 'pt':
+            elif len(pathLine) == 4 and pathLine[0] == 'pt':
                 goal_x = float(pathLine[1])
                 goal_y = float(pathLine[2])
                 goal_theta= float(pathLine[3])
                 if (abs(goal_theta) > 3.14):
                     goal_theta = -4
-                goal = list(zip([goal_x], [goal_y], [goal_theta]))
+                new_goal = list(zip([goal_x], [goal_y], [goal_theta]))
                 break
-        elif len(pathLine) == 3:
-            if pathLine[0] == 'pt':
+            elif len(pathLine) == 3 and pathLine[0] == 'pt':
                 goal_x = float(pathLine[1])
                 goal_y = float(pathLine[2])
                 goal_theta = -4
-                goal = list(zip([goal_x], [goal_y], [goal_theta]))
+                new_goal = list(zip([goal_x], [goal_y], [goal_theta]))
                 break
-        else:
-            print("Please enter a valid path type")
-    return goal
+            elif len(pathLine) == 1 and pathLine[0] == 'clear':
+                lock.acquire()
+                goal.clear()
+                lock.release()
+                rospy.loginfo("cleared all goals")
+                break
+            else:
+                print("Invalid path")
+        # return new_goal
+        if pathLine[0] != 'clear':
+            lock.acquire()
+            for i in new_goal:
+                goal.append(i)
+            lock.release()
+
+
+def move_bot_thread(bot_name, bot, goal, lock):
+    print(f"Thread {bot_name} starts")
+    while True:
+        next_goal = tuple()
+        if len(goal) != 0:
+            lock.acquire()
+            next_goal = goal[0]
+            goal.pop(0)
+            lock.release()
+        if next_goal != tuple():
+            if (next_goal[2] == -4):
+                rospy.loginfo(f"next checkpoint is {round(next_goal[0], 4)}, {round(next_goal[1], 4)}")
+                bot.move2goal(next_goal[0], next_goal[1], goal_tol)
+            else:
+                rospy.loginfo(f"next checkpoint is {round(next_goal[0], 4)}, {round(next_goal[1], 4)}, theta = {next_goal[2]}")
+                bot.move2goal_oriented(next_goal[0], next_goal[1], next_goal[2], goal_tol)
+
+def signal_handler(sig, frame):
+    print('Program ending....')
+    sys.exit()
+
 
 if __name__=='__main__':
-    try:
-        getSquare(0,0,1,1)
-        isPt = False
-        if len(sys.argv) == 6:
-            goal_theta = -4
-            if (sys.argv[1] == 'c' or sys.argv[1] == 'C'):
-                path_cx = float(sys.argv[2])
-                path_cy = float(sys.argv[3])
-                path_r = float(sys.argv[4])
-                path_step = float(sys.argv[5])
-                goal = getCircle(path_cx, path_cy, path_r, path_step)
-            elif (sys.argv[1] == 's' or sys.argv[1] == 'S'):
-                path_cx = float(sys.argv[2])
-                path_cy = float(sys.argv[3])
-                path_l = float(sys.argv[4])
-                path_step = float(sys.argv[5])
-                goal = getSquare(path_cx, path_cy, path_l, path_step)
-        elif (len(sys.argv) == 5 and sys.argv[1] == 'pt'):
-            goal_x = float(sys.argv[2])
-            goal_y = float(sys.argv[3])
-            goal_theta = float(sys.argv[4])
-            goal = list(zip([goal_x], [goal_y], [goal_theta]))
-        elif (len(sys.argv) == 4 and sys.argv[1] == 'pt'):
-            goal_x = float(sys.argv[2])
-            goal_y = float(sys.argv[3])
-            goal = list(zip([goal_x], [goal_y], [-4]))
-        else:
-            goal = getPath()
-        goal_tol = 0.1
-        x = TurtleBot()
-        for i, j, k in goal:
-            if (k == -4):
-                rospy.loginfo(f"next checkpoint is {round(i, 4)}, {round(j, 4)}")
-                x.move2goal(i, j, goal_tol)
-            else:
-                rospy.loginfo(f"next checkpoint is {round(i, 4)}, {round(j, 4)}, theta = {k}")
-                x.move2goal_oriented(i, j, k, goal_tol)
-        # else:
-        #     if (goal_theta != -4):
-        #         rospy.loginfo(f"next checkpoint is {goal_x}, {goal_y}, theta = {goal_theta}")
-        #         x.move2goal_oriented(goal_x, goal_y, goal_theta, goal_tol)
-        #     else:
-        #         rospy.loginfo(f"next checkpoint is {goal_x}, {goal_y}")
-        #         x.move2goal(goal_x, goal_y, goal_tol)
-        rospy.loginfo("reached all checkpoints")
-        rospy.spin()
-    except rospy.ROSInterruptException:
-        pass
+    usage_msg = """Usage:
+    For points, use cmd (theta can be empty): pt <x> <y> <theta>
+    For circle, use cmd: c <center x> <center y> <radius> <step>
+    For square, use cmd: s <corner x> <corner y> <length> <step>
+    To clear all inputs, use cmd: clear
+    These cmd can be added while the robot is executing the previous cmd
+    To exit program, press Ctrl C"""
+    print(usage_msg)
+    lock = threading.Lock()
+    if len(sys.argv) == 6:
+        goal_theta = -4
+        if (sys.argv[1] == 'c' or sys.argv[1] == 'C'):
+            path_cx = float(sys.argv[2])
+            path_cy = float(sys.argv[3])
+            path_r = float(sys.argv[4])
+            path_step = float(sys.argv[5])
+            new_goal = getCircle(path_cx, path_cy, path_r, path_step)
+            goal.append(new_goal)
+        elif (sys.argv[1] == 's' or sys.argv[1] == 'S'):
+            path_cx = float(sys.argv[2])
+            path_cy = float(sys.argv[3])
+            path_l = float(sys.argv[4])
+            path_step = float(sys.argv[5])
+            new_goal = getSquare(path_cx, path_cy, path_l, path_step)
+            goal.append(new_goal)
+    elif (len(sys.argv) == 5 and sys.argv[1] == 'pt'):
+        goal_x = float(sys.argv[2])
+        goal_y = float(sys.argv[3])
+        goal_theta = float(sys.argv[4])
+        new_goal = list(zip([goal_x], [goal_y], [goal_theta]))
+        goal.append(new_goal)
+    elif (len(sys.argv) == 4 and sys.argv[1] == 'pt'):
+        goal_x = float(sys.argv[2])
+        goal_y = float(sys.argv[3])
+        new_goal = list(zip([goal_x], [goal_y], [-4]))
+        goal.append(new_goal)
+    x = TurtleBot()
+    threadBot = threading.Thread(target=move_bot_thread, args=("turtlebot", x, goal, lock), daemon=True)
+    threadBot.start()
+    threadInput = threading.Thread(target=input_thread, args=(lock, ), daemon=True)
+    threadInput.start()
+    while (threadBot.is_alive()):
+        signal.signal(signal.SIGINT, signal_handler)
