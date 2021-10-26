@@ -3,6 +3,7 @@ from getpath import getCircle, getSquare
 import threading
 import sys
 import signal
+import turtle
 
 global goal
 goal = []
@@ -14,8 +15,8 @@ def input_thread(lock):
     new_goal = []
     while True:
         while True:
-            # pathLine = input("Generate path: ").split(' ')
-            pathLine = input().split(' ')
+            cmdLine = str(turtle.textinput("Command window", "Input command"))
+            pathLine = cmdLine.split(' ')
             if len(pathLine) == 5 and (pathLine[0] == 'C' or pathLine[0] == 'c'):
                 path_cx = float(pathLine[1])
                 path_cy = float(pathLine[2])
