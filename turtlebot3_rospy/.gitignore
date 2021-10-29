@@ -1,5 +1,4 @@
 build
 devel
 .catkin_workspace
-src/turtlebot3_simulations/turtlebot3*
-
+catkin_ws/src/turtlebot3_simulations/turtlebot3_*
