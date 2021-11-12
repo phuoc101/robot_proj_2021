@@ -34,7 +34,7 @@ def input_thread(lock):
             elif len(pathLine) == 4 and pathLine[0] == 'pt':
                 goal_x = float(pathLine[1])
                 goal_y = float(pathLine[2])
-                goal_theta= float(pathLine[3])
+                goal_theta= float(pathLine[3]) % 3.14
                 if (abs(goal_theta) > 3.14):
                     goal_theta = -4
                 new_goal = list(zip([goal_x], [goal_y], [goal_theta]))
@@ -72,6 +72,8 @@ def move_bot_thread(bot_name, bot, goal, lock):
             lock.acquire()
             next_goal = goal[0]
             goal.pop(0)
+            if len(goal) == 0:
+                rospy.loginfo("Goal list emptied")
             lock.release()
         if next_goal != tuple():
             if (next_goal[2] == -4):

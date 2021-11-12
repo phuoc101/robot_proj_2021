@@ -106,7 +106,7 @@ class TurtleBot:
         vel_msg.angular.z = 0
         self.velocity_publisher.publish(vel_msg)
 
-        logmsg = f"reached checkpoint, at x: {round(self.pose.x, 4)} y: {round(self.pose.y, 4)}"
+        logmsg = f"reached checkpoint, at x: {round(self.pose.x, 4)} y: {round(self.pose.y, 4)} theta: {round(self.yaw, 4)}"
         rospy.loginfo(logmsg)
 
     def move2goal_oriented(self, goal_x, goal_y, goal_theta, goal_tol):
@@ -159,5 +159,5 @@ class TurtleBot:
         vel_msg.angular.z = 0
         self.velocity_publisher.publish(vel_msg)
 
-        logmsg = f"reached checkpoint, at x: {round(self.pose.x, 4)} y: {round(self.pose.y, 4)}"
+        logmsg = f"reached checkpoint, at x: {round(self.pose.x, 4)} y: {round(self.pose.y, 4)} theta: {round(self.yaw, 4)}"
         rospy.loginfo(logmsg)
