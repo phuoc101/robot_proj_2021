@@ -1,0 +1,3 @@
+<launch>
+    <node name="my_map" pkg="map_server" type="map_server" args="/media/phuoc101/KILANBAYBAY/Projects/robot_proj_2021/turtlebot3_rospy/slam_map/map.yaml" />
+</launch>
