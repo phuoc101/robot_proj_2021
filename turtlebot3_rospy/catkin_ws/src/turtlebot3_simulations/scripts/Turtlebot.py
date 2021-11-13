@@ -68,6 +68,17 @@ class TurtleBot:
     def rot(self, goal_theta, P = 1):
         return P*(goal_theta - self.yaw)
 
+    def stop(self):
+        vel_msg = Twist()
+        vel_msg.linear.x = 0
+        vel_msg.linear.y = 0
+        vel_msg.linear.z = 0
+
+        vel_msg.angular.x = 0
+        vel_msg.angular.y = 0
+        vel_msg.angular.z = 0
+        self.velocity_publisher.publish(vel_msg)
+
     def move2goal(self, goal_x, goal_y, goal_tol):
         goal_pose = Odometry()
         goal_pose.pose.pose.position.x =goal_x 
@@ -79,32 +90,28 @@ class TurtleBot:
         while self.l2_distance(goal_pose) > tolerance :
             if abs(self.steering_angle(goal_pose) - self.yaw) >= tolerance:
                 vel_msg.linear.x = 0 
-                vel_msg.linear.y = 0
-                vel_msg.linear.z = 0
-
-                vel_msg.angular.x = 0
-                vel_msg.angular.y = 0
                 vel_msg.angular.z = self.angular_velo(goal_pose)
             else:
                 vel_msg.linear.x = max(self.linear_velo(goal_pose, P = 0.5), 0.3)
-                vel_msg.linear.y = 0
-                vel_msg.linear.z = 0
-
-                vel_msg.angular.x = 0
-                vel_msg.angular.y = 0
                 vel_msg.angular.z = self.angular_velo(goal_pose, P = 0.3)
+            vel_msg.linear.y = 0
+            vel_msg.linear.z = 0
+
+            vel_msg.angular.x = 0
+            vel_msg.angular.y = 0
             self.velocity_publisher.publish(vel_msg)
             self.error_publisher.publish(self.l2_distance(goal_pose))
             self.rate.sleep()
         
-        vel_msg.linear.x = 0
-        vel_msg.linear.y = 0
-        vel_msg.linear.z = 0
+        # vel_msg.linear.x = 0
+        # vel_msg.linear.y = 0
+        # vel_msg.linear.z = 0
 
-        vel_msg.angular.x = 0
-        vel_msg.angular.y = 0
-        vel_msg.angular.z = 0
-        self.velocity_publisher.publish(vel_msg)
+        # vel_msg.angular.x = 0
+        # vel_msg.angular.y = 0
+        # vel_msg.angular.z = 0
+        # self.velocity_publisher.publish(vel_msg)
+        self.stop()
 
         logmsg = f"reached checkpoint, at x: {round(self.pose.x, 4)} y: {round(self.pose.y, 4)} theta: {round(self.yaw, 4)}"
         rospy.loginfo(logmsg)

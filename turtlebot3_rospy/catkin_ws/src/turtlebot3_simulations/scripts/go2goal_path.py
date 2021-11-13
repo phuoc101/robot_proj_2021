@@ -10,21 +10,22 @@ goal = []
 global goal_tol
 goal_tol = 0.1
 
-def input_thread(lock):
+def input_thread(bot, lock):
     print("Input thread running")
     new_goal = []
     while True:
         while True:
             cmdLine = str(turtle.textinput("Command window", "Input command"))
+            cmdLine = cmdLine.lower()
             pathLine = cmdLine.split(' ')
-            if len(pathLine) == 5 and (pathLine[0] == 'C' or pathLine[0] == 'c'):
+            if len(pathLine) == 5 and (pathLine[0] == 'c'):
                 path_cx = float(pathLine[1])
                 path_cy = float(pathLine[2])
                 path_r = float(pathLine[3])
                 path_step = float(pathLine[4])
                 new_goal = getCircle(path_cx, path_cy, path_r, path_step)
                 break
-            elif len(pathLine) == 5 and (pathLine[0] == 'S' or pathLine[0] == 's'):
+            elif len(pathLine) == 5 and (pathLine[0] == 's'):
                 path_cx = float(pathLine[1])
                 path_cy = float(pathLine[2])
                 path_l = float(pathLine[3])
@@ -95,7 +96,7 @@ if __name__=='__main__':
     For square, use cmd: s <corner x> <corner y> <length> <step>
     To clear all inputs, use cmd: clear
     These cmd can be added while the robot is executing the previous cmd
-    To exit program, press Ctrl C"""
+    To exit program, press Ctrl C or enter cmd quit"""
     print(usage_msg)
     lock = threading.Lock()
     if len(sys.argv) == 6:
@@ -129,7 +130,7 @@ if __name__=='__main__':
     threadBot = threading.Thread(target=move_bot_thread, args=("turtlebot", x, goal, lock))
     threadBot.daemon = True
     threadBot.start()
-    threadInput = threading.Thread(target=input_thread, args=(lock, ))
+    threadInput = threading.Thread(target=input_thread, args=(x, lock, ))
     threadInput.daemon = True
     threadInput.start()
     while threadInput.is_alive():
