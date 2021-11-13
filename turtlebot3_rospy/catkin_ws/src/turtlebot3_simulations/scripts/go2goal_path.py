@@ -8,7 +8,7 @@ import turtle
 global goal
 goal = []
 global goal_tol
-goal_tol = 0.1
+goal_tol = 0.05
 
 def input_thread(bot, lock):
     print("Input thread running")
@@ -52,7 +52,8 @@ def input_thread(bot, lock):
                 lock.release()
                 rospy.loginfo("cleared all goals, please enter new inputs")
                 break
-            elif len(pathLine) == 1 and pathLine[0] == 'quit':
+            elif len(pathLine) == 1 and (pathLine[0] in ['quit', 'q']):
+                x.stop()
                 print('Program ended by user')
                 return
             else:
