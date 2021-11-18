@@ -62,3 +62,5 @@ target/
 # Notebook Checkpoints
 .ipynb_checkpoints/
 
+#vscode
+.vscode
