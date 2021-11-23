@@ -8,20 +8,29 @@ from nav_msgs.msg import Odometry
 from nav_msgs.msg import OccupancyGrid
 import time
 import numpy as np
+from numpy.linalg import norm
 import matplotlib.pyplot as plt
 import matplotlib.markers as markers
+from skimage.measure import find_contours
 
 map_data = OccupancyGrid()
 odom = Odometry
 bot_x = 0
 bot_y = 0
+resolution = 0
+ori_x = 0
+ori_y = 0
 
 def map_callback(data):
     global map_data
+    global resolution, ori_x, ori_y, w, h
     map_data = data
+    resolution = map_data.info.resolution
+    ori_x = map_data.info.origin.position.x
+    ori_y = map_data.info.origin.position.y
 
 def update_pose(data):
-    global odom
+    global odom, bot_x, bot_y
     odom = data
     bot_x = odom.pose.pose.position.x
     bot_y = odom.pose.pose.position.y
@@ -33,30 +42,64 @@ def get_map():
         pass
     get_frontier()
 
+def bot_index(x, y):
+    return np.array([int((x - ori_x)/resolution), int((y - ori_y)/resolution)])
+
+def to_map_coord(contour):
+    for index in range(len(contour)):
+        contour[index][0] = round(contour[index][0] * resolution + ori_x, 2)
+        contour[index][1] = round(contour[index][1] * resolution + ori_y, 2)
+    return contour
 
 def get_frontier():
-    # marker_publisher = rospy.Publisher('shapes', Marker, queue_size=10)
     data = map_data.data
+    # marker_publisher = rospy.Publisher('shapes', Marker, queue_size=10)
+    # print(bot_x, bot_y)
     w = map_data.info.width
     h = map_data.info.height
-    resolution = map_data.info.resolution
-    ori_x = map_data.info.origin.position.x
-    ori_y = map_data.info.origin.position.y
-    # print(bot_x, bot_y)
     data_np = np.asarray(data)
-    for i in range(0, len(data)):
-        if data_np[i] == -1:
-            data_np[i] = 255
-        elif data_np[i] == 100:
-            data_np[i] = 0
-        elif data_np[i] == 0:
-            data_np[i] = 127
     data_np = np.reshape(data_np, [h, w]);
-    print(np.unique(data_np))
-    plt.figure()
-    plt.imshow(data_np, cmap='gray', vmin = 0, vmax = 255)
-    plt.plot(int((bot_x - ori_x)/resolution), int((bot_y - ori_y)/resolution), 'bo--', linewidth=2, markersize=12)
+    bot_idx = bot_index(bot_x, bot_y)
+    ## for visualizing ####
+    # for i in range(0, data_np.shape[0]):
+    #     for j in range(0, data_np.shape[1]):
+    #         if data_np[i,j] == -1:
+    #             data_np[i,j] = 255
+    #         elif data_np[i,j] == 100:
+    #             data_np[i,j] = 0
+    #         elif data_np[i,j] == 0:
+    #             data_np[i,j] = 127
+    fig, ax = plt.subplots()
+    ax.imshow(data_np, cmap='gray', vmin = -1, vmax = 100)
+    ax.plot(bot_idx[0], bot_idx[1], 'bo--', linewidth=2, markersize=12)
+    # unknowns
+    contour_m1 = find_contours(data_np, -1, fully_connected='high')
+    # edges
+    contour_0 = find_contours(data_np, 1, fully_connected='high')
+    for contour in contour_0:
+        ax.plot(contour[:, 1], contour[:, 0], linewidth=2)
+    contour_m1 = np.concatenate(contour_m1, axis=0)
+    contour_0 = np.concatenate(contour_0, axis=0)
+    
+    contour_0 = to_map_coord(contour_0)
+    contour_m1 = to_map_coord(contour_m1)
+
+    contour_0 = np.asarray(contour_0)
+    contour_m1 = np.asarray(contour_m1)
+
+    # convert contour np arrays into sets
+    set_0 = set([tuple(x) for x in contour_0])
+    set_m1 = set([tuple(x) for x in contour_m1])
+
+    candidates = set_m1.difference(set_0)
+
+    #### uncomment for visualization
+    for can in candidates:
+        ax.plot((can[1]-ori_x)/resolution, (can[0]-ori_y)/resolution, 'rx', linewidth=1, markersize=1)
+
     plt.show()
+    
+
 
 def movebase_client(x_goal, y_goal):
     # Create an action client "move_base"
