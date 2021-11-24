@@ -13,5 +13,4 @@
     <param name="map_frame"  value="$(arg set_map_frame)"/>
     <rosparam command="load" file="$(find my_turtlebot3_slam)/config/gmapping_params.yaml" />
   </node>
-   <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 30" />
 </launch>

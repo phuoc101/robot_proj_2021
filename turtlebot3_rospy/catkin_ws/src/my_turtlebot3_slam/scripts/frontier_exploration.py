@@ -4,6 +4,7 @@ import rospy
 import actionlib
 from visualization_msgs.msg import Marker
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
 from nav_msgs.msg import OccupancyGrid
 import time
@@ -12,6 +13,7 @@ from numpy.linalg import norm
 import matplotlib.pyplot as plt
 import matplotlib.markers as markers
 from skimage.measure import find_contours
+import random
 
 map_data = OccupancyGrid()
 odom = Odometry
@@ -40,7 +42,8 @@ def get_map():
     map_client = rospy.Subscriber("/map", OccupancyGrid, map_callback)
     while map_data.header.seq<1 or len(map_data.data)<1:
         pass
-    get_frontier()
+    target = get_frontier()
+    return target
 
 def bot_index(x, y):
     return np.array([int((x - ori_x)/resolution), int((y - ori_y)/resolution)])
@@ -69,15 +72,15 @@ def get_frontier():
     #             data_np[i,j] = 0
     #         elif data_np[i,j] == 0:
     #             data_np[i,j] = 127
-    fig, ax = plt.subplots()
-    ax.imshow(data_np, cmap='gray', vmin = -1, vmax = 100)
-    ax.plot(bot_idx[0], bot_idx[1], 'bo--', linewidth=2, markersize=12)
+    # fig, ax = plt.subplots()
+    # ax.imshow(data_np, cmap='gray', vmin = -1, vmax = 100)
+    # ax.plot(bot_idx[0], bot_idx[1], 'bo--', linewidth=2, markersize=12)
     # unknowns
     contour_m1 = find_contours(data_np, -1, fully_connected='high')
     # edges
     contour_0 = find_contours(data_np, 1, fully_connected='high')
-    for contour in contour_0:
-        ax.plot(contour[:, 1], contour[:, 0], linewidth=2)
+    # for contour in contour_0:
+    #     ax.plot(contour[:, 1], contour[:, 0], linewidth=2)
     contour_m1 = np.concatenate(contour_m1, axis=0)
     contour_0 = np.concatenate(contour_0, axis=0)
     
@@ -93,17 +96,21 @@ def get_frontier():
 
     candidates = set_m1.difference(set_0)
 
-    #### uncomment for visualization
-    for can in candidates:
-        ax.plot((can[1]-ori_x)/resolution, (can[0]-ori_y)/resolution, 'rx', linewidth=1, markersize=1)
+    randcand =  random.choice(tuple(candidates))
+    print(randcand)
+    return randcand
 
-    plt.show()
+    #### uncomment for visualization
+    # for can in candidates:
+    #     ax.plot((can[1]-ori_x)/resolution, (can[0]-ori_y)/resolution, 'rx', linewidth=1, markersize=1)
+
+    # plt.show()
     
 
 
-def movebase_client(x_goal, y_goal):
-    # Create an action client "move_base"
-    client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
+def movebase_client(client, x_goal, y_goal):
+    # # Create an action client "move_base"
+    # client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
  
     # Waits until the action server has started
     client.wait_for_server()
@@ -120,24 +127,34 @@ def movebase_client(x_goal, y_goal):
     client.send_goal(goal)
     # Waits for the server to finish performing the action.
     # If the result doesn't arrive, assume the Server is not available
-    if not client.wait_for_result:
-        rospy.logerr("Action server not available!")
-        rospy.signal_shutdown("Action server not available!")
-    else:
-    # Result of executing the action
-        return client.get_result()   
+    # if not client.wait_for_result:
+    #     rospy.logerr("Action server not available!")
+    #     rospy.signal_shutdown("Action server not available!")
+    # else:
+    # # Result of executing the action
+    #     return client.get_result()   
 
 # If the python node is executed as main process (sourced directly)
 if __name__ == '__main__':
     try:
         #Initializes a rospy node to let the SimpleActionClient publish and subscribe
         rospy.init_node('movebase_client_py')
+        rate = rospy.Rate(10)
+        # Create an action client "move_base"
+        client = actionlib.SimpleActionClient('move_base',MoveBaseAction)
+        velocity_publisher = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
+        vel_msg = Twist()
         # x_goal = 0
         # y_goal = 0
         # result = movebase_client(x_goal, y_goal)
         # if result:
         #     rospy.loginfo("Goal execution done!")
-        # while True:
-        get_map()
+        while True:
+            target = get_map()
+            result = movebase_client(client, target[0], target[1])
+            client.wait_for_result()
+            # if result:
+            #     rospy.loginfo("Goal execution done!")
     except rospy.ROSInterruptException:
+    # except KeyboardInterrupt:
         rospy.loginfo("Navigation test finished.")
