@@ -26,8 +26,8 @@ bot_y = 0
 resolution = 0
 ori_x = 0
 ori_y = 0
-target = (0, 0)
-prev_target = (0, 0)
+target = np.array([0, 0])
+prev_target = np.array([0, 0])
 rviz_id = 0
 
 def map_callback(data):
@@ -86,17 +86,25 @@ def get_frontier():
     set_m1 = set([tuple(x) for x in contour_m1])
 
     candidates = list(set_m1.difference(set_0))
-    #### uncomment for visualization
-    # for can in candidates:
-    #     can = np.asarray(can)
-    #     ax.plot((can[1]-ori_x)/resolution, (can[0]-ori_y)/resolution, 'rx', linewidth=1, markersize=1)
     candidates = np.asarray(candidates)
     model = AgglomerativeClustering(n_clusters=3, affinity='euclidean', linkage='ward')
     model.fit(candidates)
     labels = model.labels_
-    plt.scatter((candidates[labels==0, 1]-ori_x)/resolution, (candidates[labels==0, 0]-ori_y)/resolution, s=50, marker='o', color='red')
-    plt.scatter((candidates[labels==1, 1]-ori_x)/resolution, (candidates[labels==1, 0]-ori_y)/resolution, s=50, marker='o', color='white')
-    plt.scatter((candidates[labels==2, 1]-ori_x)/resolution, (candidates[labels==2, 0]-ori_y)/resolution, s=50, marker='o', color='green')
+   
+    centroids = np.zeros([3, 2])
+    dis = np.zeros([3, 1])
+
+    for i in range(3):
+        centroids[i, :] = np.mean(candidates[labels==i, :], axis = 0)
+        dis[i] = norm(centroids[i, :] - bot_idx)
+    print(dis)
+    target = centroids[np.argmin(dis)]
+    print(target)
+
+    plt.scatter((candidates[labels==0, 1]-ori_x)/resolution, (candidates[labels==0, 0]-ori_y)/resolution, s=10, marker='x', color='red')
+    plt.scatter((candidates[labels==1, 1]-ori_x)/resolution, (candidates[labels==1, 0]-ori_y)/resolution, s=10, marker='x', color='white')
+    plt.scatter((candidates[labels==2, 1]-ori_x)/resolution, (candidates[labels==2, 0]-ori_y)/resolution, s=10, marker='x', color='green')
+    plt.scatter((centroids[:, 1]-ori_x)/resolution, (centroids[:, 0]-ori_y)/resolution, s=50, marker='o', color='pink')
 
 
     plt.show()
@@ -118,18 +126,7 @@ def get_frontier_thread(name, lock):
         data_np = np.asarray(data)
         data_np = np.reshape(data_np, [h, w]);
         lock.acquire()
-        # bot_idx = bot_index(bot_x, bot_y)
-        ## for visualizing ####
-        # for i in range(0, data_np.shape[0]):
-        #     for j in range(0, data_np.shape[1]):
-        #         if data_np[i,j] == -1:
-        #             data_np[i,j] = 255
-        #         elif data_np[i,j] == 100:
-        #             data_np[i,j] = 0
-        #         elif data_np[i,j] == 0:
-        #             data_np[i,j] = 127
-        # ax.imshow(data_np, cmap='gray', vmin = -1, vmax = 100)
-        # ax.plot(bot_idx[0], bot_idx[1], 'bo--', linewidth=2, markersize=12)
+        bot_idx = bot_index(bot_x, bot_y)
         # unknowns
         contour_m1 = find_contours(data_np, -1, fully_connected='high')
         # edges
@@ -149,9 +146,30 @@ def get_frontier_thread(name, lock):
         set_0 = set([tuple(x) for x in contour_0])
         set_m1 = set([tuple(x) for x in contour_m1])
 
-        candidates = np.asarray(set_m1.difference(set_0))
+        # candidates = list(set_m1.difference(set_0))
         global target
-        target =  random.choice(candidates)
+
+        candidates = list(set_m1.difference(set_0))
+        if len(candidates) < 20:
+            print('done')
+            break
+        candidates = np.asarray(candidates)
+        model = AgglomerativeClustering(n_clusters=3, affinity='euclidean', linkage='ward')
+        model.fit(candidates)
+        labels = model.labels_
+    
+        centroids = np.zeros([3, 2])
+        dis = np.ones([3, 1])*10000000
+
+        for i in range(3):
+            if np.sum(labels==i) > np.size(labels)/10:
+                centroids[i, :] = np.mean(candidates[labels==i, :], axis = 0)
+                dis[i] = norm(centroids[i, :] - bot_idx)
+            else:
+                print(f'ignore label {i} cus only {np.sum(labels==i)} points')
+        print(f'min dis {dis}')
+        target = centroids[np.argmin(dis)]
+        print(f'next target {target}')
         # print(f'chosen {target}')
         lock.release()
 
@@ -202,41 +220,28 @@ def movebase_thread(client, lock):
     client.wait_for_server()
     print('connected to server')
     while True:
-
         lock.acquire()
         global prev_target
 
         # Sends the goal to the action server.
-        if target != prev_target:
-            goal = MoveBaseGoal()
-            goal.target_pose.header.frame_id = "map"
-            goal.target_pose.header.stamp = rospy.Time.now()
-            goal.target_pose.pose.position.x = float(target[1])
-            goal.target_pose.pose.position.y = float(target[0]) 
-            goal.target_pose.pose.orientation.w = 1.0
-            print(f'new target {target}')
-            # No rotation of the mobile base frame w.r.t. map frame
-            client.send_goal(goal)
-            prev_target = target
+        goal = MoveBaseGoal()
+        goal.target_pose.header.frame_id = "map"
+        goal.target_pose.header.stamp = rospy.Time.now()
+        goal.target_pose.pose.position.x = float(target[1])
+        goal.target_pose.pose.position.y = float(target[0]) 
+        goal.target_pose.pose.orientation.w = 1.0
+        print(f'new target {target}')
+        # No rotation of the mobile base frame w.r.t. map frame
+        client.send_goal(goal)
 
-            marker_goal.pose.orientation.w = 1.0
-            marker_goal.pose.position.x = target[1]
-            marker_goal.pose.position.y = target[0]
-            marker_goal.pose.position.z = 0
-            marker_publisher.publish(marker_goal)
+        marker_goal.pose.orientation.w = 1.0
+        marker_goal.pose.position.x = target[1]
+        marker_goal.pose.position.y = target[0]
+        marker_goal.pose.position.z = 0
+        marker_publisher.publish(marker_goal)
 
         lock.release()
-        while norm(np.array([bot_x, bot_y]) - np.array([prev_target[1], prev_target[0]]) > 0.3):
-            pass
-        # client.wait_for_result()
-    # Waits for the server to finish performing the action.
-    # If the result doesn't arrive, assume the Server is not available
-    # if not client.wait_for_result:
-    #     rospy.logerr("Action server not available!")
-    #     rospy.signal_shutdown("Action server not available!")
-    # else:
-    # # Result of executing the action
-    #     return client.get_result()   
+        client.wait_for_result()
 
 
 def signal_handler(sig, frame):
@@ -261,15 +266,15 @@ if __name__ == '__main__':
     #     rospy.loginfo("Goal execution done!")
     lock = threading.Lock()
 
-    get_frontier()
+    # get_frontier()
 
-    # threadMap = threading.Thread(target=get_frontier_thread, args=('random frontier', lock, ))
-    # threadMap.daemon = True
-    # threadMap.start()
+    threadMap = threading.Thread(target=get_frontier_thread, args=('random frontier', lock, ))
+    threadMap.daemon = True
+    threadMap.start()
 
-    # threadMove = threading.Thread(target=movebase_thread, args=(movebase_client, lock, ))
-    # threadMove.daemon = True
-    # threadMove.start()
+    threadMove = threading.Thread(target=movebase_thread, args=(movebase_client, lock, ))
+    threadMove.daemon = True
+    threadMove.start()
     
-    # while threadMap.is_alive():
-    #     signal.signal(signal.SIGINT, signal_handler)
+    while threadMap.is_alive():
+        signal.signal(signal.SIGINT, signal_handler)
