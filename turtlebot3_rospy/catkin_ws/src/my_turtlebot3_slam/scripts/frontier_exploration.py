@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+from cProfile import label
 import rospy
 import actionlib
 from visualization_msgs.msg import Marker, MarkerArray
@@ -29,6 +30,7 @@ ori_y = 0
 target = np.array([0, 0])
 prev_target = np.array([0, 0])
 rviz_id = 0
+bot_idx = np.zeros([1,2])
 
 def map_callback(data):
     global map_data
@@ -53,6 +55,14 @@ def to_map_coord(contour):
         contour[index][1] = round(contour[index][1] * resolution + ori_y, 2)
     return contour
 
+def get_bot_index_thread(name):
+    global bot_idx
+    print(f"thread {name} starting")
+    while True:
+        time.sleep(1)
+        bot_idx = np.array([bot_x, bot_y])
+        print(f'bot index {bot_idx}')
+
 def get_frontier():
     fig, ax = plt.subplots()
     while map_data.header.seq<1 or len(map_data.data)<1:
@@ -63,7 +73,7 @@ def get_frontier():
     h = map_data.info.height
     data_np = np.asarray(data)
     data_np = np.reshape(data_np, [h, w]);
-    bot_idx = bot_index(bot_x, bot_y)
+    # bot_idx = bot_index(bot_x, bot_y)
     ## for visualizing ####
     plt.imshow(data_np, cmap='gray', vmin = -1, vmax = 100)
     plt.plot(bot_idx[0], bot_idx[1], 'bo--', linewidth=2, markersize=12)
@@ -109,9 +119,10 @@ def get_frontier():
 
     plt.show()
 
-
 def get_frontier_thread(name, lock):
     print(f'Thread {name} is starting')
+    n_cluster = 5
+    knn = 7
     markerarray_publisher = rospy.Publisher('visualization_marker_array', MarkerArray, queue_size=10)
     global rviz_id
     rviz_id = 0
@@ -126,7 +137,7 @@ def get_frontier_thread(name, lock):
         data_np = np.asarray(data)
         data_np = np.reshape(data_np, [h, w]);
         lock.acquire()
-        bot_idx = bot_index(bot_x, bot_y)
+        # bot_idx = bot_index(bot_x, bot_y)
         # unknowns
         contour_m1 = find_contours(data_np, -1, fully_connected='high')
         # edges
@@ -153,22 +164,39 @@ def get_frontier_thread(name, lock):
         if len(candidates) < 20:
             print('done')
             break
-        candidates = np.asarray(candidates)
-        model = AgglomerativeClustering(n_clusters=3, affinity='euclidean', linkage='ward')
+        # candidates = np.asarray(candidates)
+        model = AgglomerativeClustering(n_clusters=n_cluster, affinity='euclidean', linkage='ward')
         model.fit(candidates)
         labels = model.labels_
+        lbl_ign = []
+        for i in range(n_cluster):
+            if np.sum(labels==i) < 10:
+                lbl_ign.append(i)
+                print(f'ignore label {i}')
     
-        centroids = np.zeros([3, 2])
-        dis = np.ones([3, 1])*10000000
+        dis = np.ones([len(candidates), 1])*10000000
 
-        for i in range(3):
-            if np.sum(labels==i) > np.size(labels)/10:
-                centroids[i, :] = np.mean(candidates[labels==i, :], axis = 0)
-                dis[i] = norm(centroids[i, :] - bot_idx)
-            else:
-                print(f'ignore label {i} cus only {np.sum(labels==i)} points')
-        print(f'min dis {dis}')
-        target = centroids[np.argmin(dis)]
+        for i in range(len(candidates)):
+            if labels[i] not in lbl_ign:
+                dis[i] = norm(np.asarray(candidates[i]) - bot_idx)
+        
+        
+        candidates = np.asarray(candidates)
+        
+        dis_sort = np.argsort(dis)
+        nearest_idx = dis_sort[0:knn]
+        potential_targets = labels[nearest_idx]
+        # print(f'potential targets: {potential_targets[:,0]}')
+        # print(potential_targets[:,0])
+        target_label = np.argmax(np.bincount(potential_targets[:,0]))
+        target = np.mean(candidates[labels==target_label, :], axis = 0)
+
+        # for i in range(n_cluster):
+        #     if np.sum(labels==i, axis=0) > 8:
+        #         centroids[i, :] = np.mean(candidates[labels==i, :], axis = 0)
+        #         dis[i] = norm(centroids[i, :] - bot_idx)
+        # print(f'min dis {dis}')
+        # target = centroids[np.argmin(dis)]
         print(f'next target {target}')
         # print(f'chosen {target}')
         lock.release()
@@ -267,6 +295,9 @@ if __name__ == '__main__':
     lock = threading.Lock()
 
     # get_frontier()
+    threadBotIdx = threading.Thread(target = get_bot_index_thread, args = ('bot index', ))
+    threadBotIdx.daemon = True
+    threadBotIdx.start()
 
     threadMap = threading.Thread(target=get_frontier_thread, args=('random frontier', lock, ))
     threadMap.daemon = True
