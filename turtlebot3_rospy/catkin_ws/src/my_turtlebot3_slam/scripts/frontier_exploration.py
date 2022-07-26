@@ -121,7 +121,7 @@ def get_frontier():
 
     plt.show()
 
-# thread to find the frontiers and set target
+# thread to find the frontier<s and set target
 def get_frontier_thread(name, lock):
     print(f'Thread {name} is starting')
     # these values can be changed
@@ -162,7 +162,7 @@ def get_frontier_thread(name, lock):
 
         # stop condition
         candidates = list(set_m1.difference(set_0))
-        if len(candidates) < 20:
+        if len(candidates) < 15:
             print('done')
             break
 
